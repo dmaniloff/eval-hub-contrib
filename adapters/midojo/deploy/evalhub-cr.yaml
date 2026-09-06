@@ -1,0 +1,22 @@
+apiVersion: trustyai.opendatahub.io/v1
+kind: EvalHub
+metadata:
+  name: evalhub
+  namespace: openshell
+spec:
+  # Single replica is enough for a demo instance.
+  replicas: 1
+  # The operator does not assume a default DB; SQLite is fine for a demo.
+  database:
+    type: sqlite
+  # Stand up the MiDojo control plane (midojo-serve --suite eval_hub_suite) as a
+  # companion Deployment + Service (+ Route) in this CR's namespace. The adapter
+  # and the agent both call back to this control plane over plain HTTP on 8080.
+  midojo:
+    enabled: true
+    # midojo image with the eval_hub_suite bundled (midojo-serve on PATH). Same
+    # image as the adapter; defaults to quay.io/eval-hub/community-midojo:latest
+    # if omitted.
+    image: image-registry.openshift-image-registry.svc:5000/openshell/community-midojo:dev
+    # Optional: run the control plane in a different namespace than the CR.
+    # namespace: openshell

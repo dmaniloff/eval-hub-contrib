@@ -1,0 +1,43 @@
+# MiDojo adapter container for eval-hub (Option C, HTTP transport).
+#
+# MiDojo requires Python >= 3.12, so this uses the ubi9 python-312 base (most
+# adapters use 3.11). MiDojo is a private repo, so it is installed from a wheel
+# staged into the build context, not from an index. Build the wheel first:
+#
+#   (cd ../../midojo && uv build) && cp ../../midojo/dist/midojo-*.whl .
+#
+# then build the image from this directory. The wheel bundles the suites,
+# including eval_hub_suite.
+#
+# This single image serves two roles: the eval-hub adapter (ENTRYPOINT below
+# runs the orchestrator, midojo-run --protocol http) and the operator's control
+# plane companion (its Deployment overrides the command to midojo-serve --suite
+# eval_hub_suite ...). Both are on PATH from the wheel.
+FROM registry.access.redhat.com/ubi9/python-312:latest
+
+USER 0
+WORKDIR /app
+
+# Python deps: the SDK + adapter deps first (better layer caching), then MiDojo.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install MiDojo from the staged wheel. Option C uses only the HTTP transport
+# and the bundled suites, so no optional extras (no OpenShell SDK) are needed.
+COPY midojo-*.whl .
+RUN pip install --no-cache-dir "$(ls midojo-*.whl)" && rm -f midojo-*.whl
+
+# Adapter code
+COPY main.py .
+
+# Writable dirs for the orchestrator's run logs / results.json (HOME=/tmp).
+RUN mkdir -p /tmp/midojo_runs && chmod -R 777 /tmp && \
+    chown -R 1001:0 /app && chmod -R g+rwX /app
+
+ENV PYTHONUNBUFFERED=1
+ENV EVALHUB_MODE=k8s
+ENV HOME=/tmp
+
+USER 1001
+
+ENTRYPOINT ["python", "main.py"]

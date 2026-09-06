@@ -1,0 +1,12 @@
+# EvalHub SDK (framework adapter)
+eval-hub-sdk[adapter]>=1.0.2
+
+# MiDojo (man-in-the-middle red-teaming). MiDojo is a private repo, so the image
+# installs it from a wheel staged into the build context rather than from an
+# index. Option C uses only the HTTP transport, so no optional extras are needed.
+# See Containerfile + README.md:
+#   (cd ../../midojo && uv build) && cp ../../midojo/dist/midojo-*.whl .
+# The wheel bundles the suites, including eval_hub_suite.
+
+# Direct dependency used by the adapter itself (also pulled in transitively).
+httpx>=0.28

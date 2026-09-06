@@ -1,0 +1,18 @@
+{
+  "id": "midojo-eval-hub-suite-test-001",
+  "provider_id": "midojo",
+  "benchmark_id": "eval_hub_suite",
+  "benchmark_index": 0,
+  "model": {
+    "url": "http://127.0.0.1:8321/v1",
+    "name": "your-model-id"
+  },
+  "parameters": {},
+  "callback_url": "http://localhost:8080",
+  "num_examples": null,
+  "experiment_name": "midojo-eval-hub-suite-test",
+  "tags": [
+    {"framework": "midojo"},
+    {"evaluation_type": "prompt_injection"}
+  ]
+}

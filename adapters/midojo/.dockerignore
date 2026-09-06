@@ -1,0 +1,18 @@
+# Exclude from container builds
+meta/job.json
+meta/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+.venv/
+venv/
+tests/
+*.log
+*.tmp
+.DS_Store
+.git/
+.gitignore
+README.md
+# NOTE: midojo-*.whl is intentionally NOT ignored — it is staged into the build.

@@ -17,6 +17,11 @@ IMAGE_RAGAS = $(REGISTRY)/community-ragas:$(VERSION)
 IMAGE_SWEBENCH = $(REGISTRY)/community-swebench:$(VERSION)
 IMAGE_RULER = $(REGISTRY)/community-ruler:$(VERSION)
 IMAGE_NEMO_GUARDRAILS = $(REGISTRY)/community-nemo-guardrails:$(VERSION)
+IMAGE_MIDOJO = $(REGISTRY)/community-midojo:$(VERSION)
+
+# MiDojo is a private package installed from a locally-built wheel (see
+# adapters/midojo/Containerfile). Point this at your MiDojo checkout.
+MIDOJO_SRC ?= ../midojo
 
 # Default target
 .PHONY: help
@@ -131,6 +136,18 @@ image-swebench:
 	$(BUILD_TOOL) build -t $(IMAGE_SWEBENCH) -f Containerfile .
 	@echo "✅ Built: $(IMAGE_SWEBENCH)"
 
+.PHONY: image-midojo
+image-midojo:
+	@echo "Building MiDojo wheel from $(MIDOJO_SRC)..."
+	cd $(MIDOJO_SRC) && uv build --wheel
+	rm -f adapters/midojo/midojo-*.whl
+	cp $(MIDOJO_SRC)/dist/midojo-*.whl adapters/midojo/
+	@echo "Building MiDojo adapter image..."
+	cd adapters/midojo && \
+	$(BUILD_TOOL) build -t $(IMAGE_MIDOJO) -f Containerfile .
+	rm -f adapters/midojo/midojo-*.whl
+	@echo "✅ Built: $(IMAGE_MIDOJO)"
+
 .PHONY: images
 images: image-lighteval image-guidellm image-mteb image-ragas image-swebench image-ruler image-nemo-guardrails
 	@echo "✅ All adapter images built"
@@ -181,6 +198,12 @@ push-swebench:
 	@echo "Pushing SWE-bench adapter image..."
 	$(BUILD_TOOL) push $(IMAGE_SWEBENCH)
 	@echo "✅ Pushed: $(IMAGE_SWEBENCH)"
+
+.PHONY: push-midojo
+push-midojo:
+	@echo "Pushing MiDojo adapter image..."
+	$(BUILD_TOOL) push $(IMAGE_MIDOJO)
+	@echo "✅ Pushed: $(IMAGE_MIDOJO)"
 
 .PHONY: push-images
 push-images: push-lighteval push-guidellm push-mteb push-ragas push-swebench push-ruler push-nemo-guardrails
@@ -257,6 +280,16 @@ build-and-push-deepeval: image-deepeval push-deepeval
 build-and-push-swebench: image-swebench push-swebench
 	@echo "✅ SWE-bench adapter built and pushed"
 
+.PHONY: build-and-push-midojo
+build-and-push-midojo: image-midojo push-midojo
+	@echo "✅ MiDojo adapter built and pushed"
+
+.PHONY: clean-midojo
+clean-midojo:
+	@echo "Removing MiDojo adapter image..."
+	$(BUILD_TOOL) rmi $(IMAGE_MIDOJO) 2>/dev/null || true
+	@echo "✅ Removed: $(IMAGE_MIDOJO)"
+
 .PHONY: build-and-push-all
 build-and-push-all: images push-images
 	@echo "✅ All adapters built and pushed"
@@ -306,6 +339,15 @@ test-inspect:
 	uv pip install --quiet --python .venv/bin/python -r requirements.txt -r requirements-test.txt && \
 	PATH="$$(pwd)/.venv/bin:$$PATH" .venv/bin/pytest tests/ -v
 	@echo "✅ Inspect AI tests passed"
+
+.PHONY: test-midojo
+test-midojo:
+	@echo "Running MiDojo adapter tests..."
+	cd adapters/midojo && \
+	test -d .venv || uv venv --python $(PYTHON_VERSION) .venv && \
+	uv pip install --quiet --python .venv/bin/python -r requirements.txt -r requirements-test.txt && \
+	PATH="$$(pwd)/.venv/bin:$$PATH" .venv/bin/pytest tests/ -v
+	@echo "✅ MiDojo tests passed"
 
 .PHONY: tests
 tests: test-guidellm test-lighteval test-mteb test-clear test-inspect
