@@ -65,25 +65,25 @@ def test_resolve_task_standard_gsm8k(job_spec_path):
 
 def test_resolve_task_standard_telemath(job_spec_path):
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/telemath"
+    adapter.job_spec.benchmark_id = "telemath"
     assert adapter._resolve_task(adapter.job_spec, "standard", None) == "evals/telemath"
 
 
 def test_resolve_task_standard_teleqna(job_spec_path):
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/teleqna"
+    adapter.job_spec.benchmark_id = "teleqna"
     assert adapter._resolve_task(adapter.job_spec, "standard", None) == "evals/teleqna"
 
 
 def test_resolve_task_standard_telelogs(job_spec_path):
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/telelogs"
+    adapter.job_spec.benchmark_id = "telelogs"
     assert adapter._resolve_task(adapter.job_spec, "standard", None) == "evals/telelogs"
 
 
 def test_resolve_task_standard_3gpp_tsg(job_spec_path):
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/3gpp-tsg"
+    adapter.job_spec.benchmark_id = "3gpp-tsg"
     assert adapter._resolve_task(adapter.job_spec, "standard", None) == "evals/three_gpp"
 
 
@@ -302,7 +302,7 @@ def test_telemath_full_parameter(job_spec_path, tmp_path, monkeypatch):
     """TeleMath maps to evals/telemath; parameters.full becomes -T full=true."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://vllm:8080/v1")
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/telemath"
+    adapter.job_spec.benchmark_id = "telemath"
     adapter.job_spec.num_examples = 50
     adapter.job_spec.parameters.pop("task_args", None)
     adapter.job_spec.parameters["full"] = True
@@ -318,7 +318,7 @@ def test_telemath_full_not_injected_without_parameter(job_spec_path, tmp_path, m
     """Without parameters.full, TeleMath does not add -T full=…."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://vllm:8080/v1")
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/telemath"
+    adapter.job_spec.benchmark_id = "telemath"
     adapter.job_spec.num_examples = None
     adapter.job_spec.parameters.pop("task_args", None)
     adapter.job_spec.parameters.pop("full", None)
@@ -333,7 +333,7 @@ def test_teleqna_subject_and_full_parameters(job_spec_path, tmp_path, monkeypatc
     """TeleQnA forwards flat parameters.full and parameters.subject as -T flags."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://vllm:8080/v1")
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/teleqna"
+    adapter.job_spec.benchmark_id = "teleqna"
     adapter.job_spec.num_examples = 25
     adapter.job_spec.parameters.pop("task_args", None)
     adapter.job_spec.parameters["full"] = True
@@ -351,7 +351,7 @@ def test_telelogs_eval_type_and_full_parameters(job_spec_path, tmp_path, monkeyp
     """TeleLogs forwards flat parameters.full and parameters.eval_type as -T flags."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://vllm:8080/v1")
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/telelogs"
+    adapter.job_spec.benchmark_id = "telelogs"
     adapter.job_spec.num_examples = 40
     adapter.job_spec.parameters.pop("task_args", None)
     adapter.job_spec.parameters["full"] = True
@@ -369,7 +369,7 @@ def test_3gpp_tsg_full_parameter(job_spec_path, tmp_path, monkeypatch):
     """3GPP-TSG maps to evals/three_gpp and forwards parameters.full."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://vllm:8080/v1")
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/3gpp-tsg"
+    adapter.job_spec.benchmark_id = "3gpp-tsg"
     adapter.job_spec.num_examples = 30
     adapter.job_spec.parameters.pop("task_args", None)
     adapter.job_spec.parameters["full"] = True
@@ -385,7 +385,7 @@ def test_full_parameter_wins_over_task_args(job_spec_path, tmp_path, monkeypatch
     """parameters.full is the supported path; task_args.full is ignored if full is set."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://vllm:8080/v1")
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/telemath"
+    adapter.job_spec.benchmark_id = "telemath"
     adapter.job_spec.num_examples = None
     adapter.job_spec.parameters["full"] = True
     adapter.job_spec.parameters["task_args"] = {"full": False, "dish_scaffold": "claude-code"}
@@ -402,7 +402,7 @@ def test_none_first_class_params_omitted(job_spec_path, tmp_path, monkeypatch):
     """None first-class params stay in input but are not forwarded as -T flags."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://vllm:8080/v1")
     adapter = InspectAdapter(job_spec_path=job_spec_path)
-    adapter.job_spec.benchmark_id = "inspect/teleqna"
+    adapter.job_spec.benchmark_id = "teleqna"
     adapter.job_spec.num_examples = 5
     adapter.job_spec.parameters.pop("task_args", None)
     adapter.job_spec.parameters["full"] = None
@@ -836,3 +836,13 @@ def test_all_standard_benchmarks_have_task_or_none():
 
 def test_petri_primary_metric_is_defined():
     assert PETRI_PRIMARY_METRIC == "concerning"
+
+
+OPEN_TELCO_BENCHMARK_IDS = frozenset({"telemath", "teleqna", "telelogs", "3gpp-tsg"})
+
+
+def test_open_telco_benchmark_ids_are_k8s_label_safe():
+    """Open-Telco benchmark IDs must not contain '/' (used as Kubernetes label values)."""
+    for bid in OPEN_TELCO_BENCHMARK_IDS:
+        assert "/" not in bid, f"{bid} is not safe for Kubernetes label values"
+        assert bid in STANDARD_TASK_MAP, f"{bid} missing from STANDARD_TASK_MAP"
