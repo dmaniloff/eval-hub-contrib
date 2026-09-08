@@ -1,8 +1,11 @@
+# EvalHub CR with MiDojo control plane enabled (template — substitute image before apply).
+# See README §3:
+#   export MIDOJO_IMAGE="image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev"
+#   envsubst '${MIDOJO_IMAGE}' < deploy/evalhub-cr.yaml | oc apply -n $NS -f -
 apiVersion: trustyai.opendatahub.io/v1
 kind: EvalHub
 metadata:
   name: evalhub
-  namespace: openshell
 spec:
   # Single replica is enough for a demo instance.
   replicas: 1
@@ -17,6 +20,4 @@ spec:
     # midojo image with the eval_hub_suite bundled (midojo-serve on PATH). Same
     # image as the adapter; defaults to quay.io/eval-hub/community-midojo:latest
     # if omitted.
-    image: image-registry.openshift-image-registry.svc:5000/openshell/community-midojo:dev
-    # Optional: run the control plane in a different namespace than the CR.
-    # namespace: openshell
+    image: ${MIDOJO_IMAGE}
