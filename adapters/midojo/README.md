@@ -52,7 +52,7 @@ Runtime environment the adapter reads:
 
 | Env | Meaning |
 |---|---|
-| `MIDOJO_CONTROL_URL` | Control-plane URL (default `http://evalhub-midojo.<ns>.svc.cluster.local:8080`) |
+| `MIDOJO_CONTROL_URL` | Control-plane URL (default `http://evalhub-midojo-control-plane.<ns>.svc.cluster.local:8080`) |
 | `MIDOJO_AGENT_URI` | Agent URL (default `http://eval-hub-suite-agent.<ns>.svc.cluster.local:8000`) |
 
 Both endpoints must be reachable in-cluster. The agent's SDK hooks also call the
@@ -89,7 +89,8 @@ oc patch bc eval-hub-suite-agent -n $NS --type=merge -p \
 oc start-build eval-hub-suite-agent -n $NS --from-dir=. -F
 ```
 
-Deploy the example agent:
+Deploy the example agent (create the LLM-credentials Secret first — not checked
+into git):
 
 ```bash
 oc create secret generic eval-hub-suite-agent-llm-creds -n $NS \
@@ -166,7 +167,7 @@ Start EvalHub with the MiDojo control plane enabled:
 export MIDOJO_IMAGE="${MIDOJO_IMAGE:-image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev}"
 
 envsubst '${MIDOJO_IMAGE}' < eval-hub-contrib/adapters/midojo/deploy/evalhub-cr.yaml | oc apply -n $NS -f -
-oc rollout status deploy/evalhub-midojo -n $NS
+oc rollout status deploy/evalhub-midojo-control-plane -n $NS
 oc get evalhub evalhub -n $NS -o jsonpath='{.status.midojo}{"\n"}'     # ready: true
 ```
 
@@ -174,8 +175,8 @@ Make sure EvalHub and the control plane are both up:
 
 ```bash
 # Kubernetes: Deployments available
-oc wait --for=condition=Available deploy/evalhub deploy/evalhub-midojo -n $NS --timeout=300s
-oc get deploy evalhub evalhub-midojo -n $NS
+oc wait --for=condition=Available deploy/evalhub deploy/evalhub-midojo-control-plane -n $NS --timeout=300s
+oc get deploy evalhub evalhub-midojo-control-plane -n $NS
 
 # EvalHub CR: MiDojo companion status
 oc get evalhub evalhub -n $NS -o jsonpath='midojo phase={.status.midojo.phase} ready={.status.midojo.ready}{"\n"}'
@@ -209,7 +210,7 @@ cd eval-hub-contrib/adapters/midojo
 
 # Defaults for this setup (override any of these if your Services or image differ)
 export MIDOJO_IMAGE="${MIDOJO_IMAGE:-image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev}"
-export MIDOJO_CONTROL_URL="${MIDOJO_CONTROL_URL:-http://evalhub-midojo.${NS}.svc.cluster.local:8080}"
+export MIDOJO_CONTROL_URL="${MIDOJO_CONTROL_URL:-http://evalhub-midojo-control-plane.${NS}.svc.cluster.local:8080}"
 export MIDOJO_AGENT_URI="${MIDOJO_AGENT_URI:-http://eval-hub-suite-agent.${NS}.svc.cluster.local:8000}"
 
 envsubst '${MIDOJO_IMAGE} ${MIDOJO_CONTROL_URL} ${MIDOJO_AGENT_URI}' \

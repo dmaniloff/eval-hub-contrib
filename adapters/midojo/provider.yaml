@@ -4,7 +4,7 @@
 #
 # Cluster tenant ConfigMap: substitute ${MIDOJO_*} then register (see README §4):
 #   export MIDOJO_IMAGE="image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev"
-#   export MIDOJO_CONTROL_URL="http://evalhub-midojo.${NS}.svc.cluster.local:8080"
+#   export MIDOJO_CONTROL_URL="http://evalhub-midojo-control-plane.${NS}.svc.cluster.local:8080"
 #   export MIDOJO_AGENT_URI="http://eval-hub-suite-agent.${NS}.svc.cluster.local:8000"
 #   envsubst '${MIDOJO_IMAGE} ${MIDOJO_CONTROL_URL} ${MIDOJO_AGENT_URI}' < provider.yaml > /tmp/midojo-provider.yaml
 

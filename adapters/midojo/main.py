@@ -63,9 +63,9 @@ SUITE = "eval_hub_suite"
 
 # Default in-cluster addresses. Both are overridable via env (set on the adapter
 # Job by the operator/provider config) or JobSpec parameters. The control-plane
-# Service is created by the operator as ``<evalhub-cr-name>-midojo`` in the CR
-# namespace; the agent is the eval_hub_suite pi agent Service.
-DEFAULT_CONTROL_URL = "http://evalhub-midojo.openshell.svc.cluster.local:8080"
+# Service is created by the operator as ``<evalhub-cr-name>-midojo-control-plane``
+# in the CR namespace; the agent is the eval_hub_suite pi agent Service.
+DEFAULT_CONTROL_URL = "http://evalhub-midojo-control-plane:8080"
 DEFAULT_AGENT_URI = "http://eval-hub-suite-agent.openshell.svc.cluster.local:8000"
 
 
