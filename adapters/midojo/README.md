@@ -43,7 +43,7 @@ EvalHub CRD (spec.midojo) ───── stands up ─────────�
 | Parameter | Default | Meaning |
 |---|---|---|
 | `control_url` | Service DNS | Operator control plane (`midojo-serve`); also `MIDOJO_CONTROL_URL` env |
-| `agent_uri` | Service DNS | Agent under test (`eval_hub_suite` pi agent); also `MIDOJO_AGENT_URI` env |
+| `agent_uri` | *(required)* | Agent under test; set via `parameters.agent_uri` or `MIDOJO_AGENT_URI` env |
 | `user_tasks` | all | Specific user task IDs |
 | `injection_tasks` | all | Specific injection task IDs |
 | `timeout_seconds` | `7200` | Overall run timeout |
@@ -53,7 +53,7 @@ Runtime environment the adapter reads:
 | Env | Meaning |
 |---|---|
 | `MIDOJO_CONTROL_URL` | Control-plane URL (default `http://evalhub-midojo-control-plane.<ns>.svc.cluster.local:8080`) |
-| `MIDOJO_AGENT_URI` | Agent URL (default `http://eval-hub-suite-agent.<ns>.svc.cluster.local:8000`) |
+| `MIDOJO_AGENT_URI` | Agent URL (**required** — no default; set on the tenant provider) |
 
 Both endpoints must be reachable in-cluster. The agent's SDK hooks also call the
 control plane, so `control_url` must resolve from the agent pod as well as from

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from evalhub.adapter import JobPhase, JobStatus
-from main import DEFAULT_AGENT_URI, DEFAULT_CONTROL_URL, SUITE, MidojoAdapter
+from main import DEFAULT_CONTROL_URL, SUITE, MidojoAdapter
 
 # ---------------------------------------------------------------------------
 # Config resolution
@@ -32,7 +32,8 @@ def test_resolve_control_url_precedence(midojo_adapter, monkeypatch):
 
 def test_resolve_agent_uri_precedence(midojo_adapter, monkeypatch):
     monkeypatch.delenv("MIDOJO_AGENT_URI", raising=False)
-    assert midojo_adapter._resolve_agent_uri({}) == DEFAULT_AGENT_URI
+    with pytest.raises(ValueError, match="agent_uri is required"):
+        midojo_adapter._resolve_agent_uri({})
     monkeypatch.setenv("MIDOJO_AGENT_URI", "http://agent.env:8000")
     assert midojo_adapter._resolve_agent_uri({}) == "http://agent.env:8000"
     assert (
@@ -120,6 +121,7 @@ def test_read_results_missing_raises(midojo_adapter, tmp_path):
 
 @pytest.mark.integration
 def test_run_benchmark_job_happy_path(midojo_adapter, mock_callbacks, monkeypatch):
+    monkeypatch.setenv("MIDOJO_AGENT_URI", "http://eval-hub-suite-agent:8000")
     ready_urls: list[str] = []
     started: dict = {}
 
@@ -147,7 +149,7 @@ def test_run_benchmark_job_happy_path(midojo_adapter, mock_callbacks, monkeypatc
     # Orchestrator wired to the fixed suite + control url + agent uri.
     orch = started["orchestrator"]
     assert orch["control_url"] == DEFAULT_CONTROL_URL
-    assert orch["agent_uri"] == DEFAULT_AGENT_URI
+    assert orch["agent_uri"] == "http://eval-hub-suite-agent:8000"
 
     # Results mapped and scored.
     assert results.overall_score is not None
@@ -169,6 +171,8 @@ def test_run_benchmark_job_happy_path(midojo_adapter, mock_callbacks, monkeypatc
 
 @pytest.mark.integration
 def test_run_benchmark_job_reports_failure(midojo_adapter, mock_callbacks, monkeypatch):
+    monkeypatch.setenv("MIDOJO_AGENT_URI", "http://eval-hub-suite-agent:8000")
+
     def boom(url, what, timeout_s):
         raise RuntimeError(f"{what} never became ready")
 

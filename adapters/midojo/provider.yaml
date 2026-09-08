@@ -87,8 +87,8 @@ parameters:
     default: null
     description: >-
       URL of the agent under test (the eval_hub_suite HTTP-wrapped pi agent).
-      Defaults to the in-cluster Service DNS; can also be set via the
-      MIDOJO_AGENT_URI env var.
+      Required — set on each job or via the MIDOJO_AGENT_URI env var on the
+      adapter runtime (tenant provider ConfigMap).
 
   - name: user_tasks
     type: array

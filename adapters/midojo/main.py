@@ -66,7 +66,6 @@ SUITE = "eval_hub_suite"
 # Service is created by the operator as ``<evalhub-cr-name>-midojo-control-plane``
 # in the CR namespace; the agent is the eval_hub_suite pi agent Service.
 DEFAULT_CONTROL_URL = "http://evalhub-midojo-control-plane:8080"
-DEFAULT_AGENT_URI = "http://eval-hub-suite-agent.openshell.svc.cluster.local:8000"
 
 
 class MidojoAdapter(FrameworkAdapter):
@@ -232,15 +231,17 @@ class MidojoAdapter(FrameworkAdapter):
     def _resolve_agent_uri(self, parameters: dict[str, Any]) -> str:
         """URL of the agent under test (the eval_hub_suite HTTP-wrapped pi agent).
 
-        Precedence: JobSpec parameter > MIDOJO_AGENT_URI env > default Service
-        DNS. Passed to ``midojo-run`` as ``--agent-uri``; the orchestrator POSTs
-        ``{"prompt": ...}`` to this URL.
+        Precedence: JobSpec parameter > MIDOJO_AGENT_URI env. Required — there is
+        no default; the agent is customer-provided. Passed to ``midojo-run`` as
+        ``--agent-uri``; the orchestrator POSTs ``{"prompt": ...}`` to this URL.
         """
-        return (
-            parameters.get("agent_uri")
-            or os.environ.get("MIDOJO_AGENT_URI")
-            or DEFAULT_AGENT_URI
-        )
+        uri = parameters.get("agent_uri") or os.environ.get("MIDOJO_AGENT_URI")
+        if not uri:
+            raise ValueError(
+                "agent_uri is required: set parameters.agent_uri on the job or "
+                "MIDOJO_AGENT_URI on the adapter runtime"
+            )
+        return uri
 
     @staticmethod
     def _as_list(value: Any) -> list[str]:
