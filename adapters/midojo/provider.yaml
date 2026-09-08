@@ -1,9 +1,16 @@
 # MiDojo Provider Configuration
 # Man-in-the-middle prompt-injection red-teaming for AI agents (Option C: HTTP
 # transport against a remote agent + an operator-managed control plane).
+#
+# Cluster tenant ConfigMap: substitute ${MIDOJO_*} then register (see README §4):
+#   export MIDOJO_IMAGE="image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev"
+#   export MIDOJO_CONTROL_URL="http://evalhub-midojo.${NS}.svc.cluster.local:8080"
+#   export MIDOJO_AGENT_URI="http://eval-hub-suite-agent.${NS}.svc.cluster.local:8000"
+#   envsubst '${MIDOJO_IMAGE} ${MIDOJO_CONTROL_URL} ${MIDOJO_AGENT_URI}' < provider.yaml > /tmp/midojo-provider.yaml
 
 id: midojo
 name: MiDojo
+title: MiDojo
 description: >-
   Man-in-the-middle red-teaming for AI agents. Runs benign user tasks crossed
   with adversarial injection tasks against a remote agent over HTTP, and reports
@@ -13,14 +20,32 @@ description: >-
   --protocol http), which drives the agent and grades against the control plane.
 type: builtin
 
+agent:
+  evaluates: [security, red_teaming, prompt_injection]
+  recommended_when:
+    - "User wants to test whether an agent can be tricked into unsafe actions via prompt injection"
+    - "Pre-deployment safety gate for a tool-using agent"
+  target_type: agent
+  summary: "Red-team an AI agent for prompt-injection susceptibility"
+  result_interpretation:
+    - "attack_success_rate is the fraction of injection pairs where the attack landed"
+    - "LOWER is better -- 0.0 means the agent resisted every injection"
+    - "avg_utility is how often the agent still completed the benign task (higher is better)"
+
 runtime:
   k8s:
-    image: quay.io/evalhub/community-midojo:latest
+    image: ${MIDOJO_IMAGE}
+    image_pull_policy: always
     entrypoint: ["python", "main.py"]
-    cpu_request: 200m
+    cpu_request: 250m
     memory_request: 512Mi
-    cpu_limit: 1000m
+    cpu_limit: "1"
     memory_limit: 2Gi
+    env:
+      - name: MIDOJO_CONTROL_URL
+        value: ${MIDOJO_CONTROL_URL}
+      - name: MIDOJO_AGENT_URI
+        value: ${MIDOJO_AGENT_URI}
   local:
     # Reserved for local runtime configuration
 

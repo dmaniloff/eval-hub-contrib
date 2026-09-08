@@ -183,16 +183,24 @@ namespace** (`$NS`) labeled
 its benchmark is `eval_hub_suite` and its image points at `community-midojo:dev`:
 
 ```bash
+cd eval-hub-contrib/adapters/midojo
+
+# Defaults for this setup (override any of these if your Services or image differ)
+export MIDOJO_IMAGE="${MIDOJO_IMAGE:-image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev}"
+export MIDOJO_CONTROL_URL="${MIDOJO_CONTROL_URL:-http://evalhub-midojo.${NS}.svc.cluster.local:8080}"
+export MIDOJO_AGENT_URI="${MIDOJO_AGENT_URI:-http://eval-hub-suite-agent.${NS}.svc.cluster.local:8000}"
+
+envsubst '${MIDOJO_IMAGE} ${MIDOJO_CONTROL_URL} ${MIDOJO_AGENT_URI}' \
+  < provider.yaml > /tmp/midojo-provider.yaml
+
 oc create configmap evalhub-provider-midojo -n $NS \
-  --from-file=midojo.yaml=eval-hub-contrib/adapters/midojo/provider.yaml \
+  --from-file=midojo.yaml=/tmp/midojo-provider.yaml \
   --dry-run=client -o yaml | \
   oc label -f - --local -o yaml \
     trustyai.opendatahub.io/evalhub-provider-type=tenant \
     trustyai.opendatahub.io/evalhub-provider-name=midojo | \
   oc apply -f -
 ```
-
-Or apply the checked-in manifest: `oc apply -n $NS -f deploy/evalhub-provider-midojo.yaml`
 
 
 ### 5. Run the evaluation
