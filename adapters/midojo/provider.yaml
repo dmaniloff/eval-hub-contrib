@@ -2,7 +2,7 @@
 # Man-in-the-middle prompt-injection red-teaming for AI agents (Option C: HTTP
 # transport against a remote agent + an operator-managed control plane).
 #
-# Cluster tenant ConfigMap: substitute ${MIDOJO_*} then register (see README §4):
+# Cluster system-provider ConfigMap: substitute ${MIDOJO_*} then register (see README §4):
 #   export MIDOJO_IMAGE="image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev"
 #   export MIDOJO_CONTROL_URL="http://evalhub-midojo-control-plane.${NS}.svc.cluster.local:8080"
 #   export MIDOJO_AGENT_URI="http://eval-hub-suite-agent.${NS}.svc.cluster.local:8000"
@@ -88,17 +88,17 @@ parameters:
     description: >-
       URL of the agent under test (the eval_hub_suite HTTP-wrapped pi agent).
       Required — set on each job or via the MIDOJO_AGENT_URI env var on the
-      adapter runtime (tenant provider ConfigMap).
+      adapter runtime (system provider ConfigMap).
 
   - name: user_tasks
     type: array
     default: null
-    description: Specific user task IDs to run (default: all in the suite).
+    description: "Specific user task IDs to run (default: all in the suite)."
 
   - name: injection_tasks
     type: array
     default: null
-    description: Specific injection task IDs to run (default: all in the suite).
+    description: "Specific injection task IDs to run (default: all in the suite)."
 
   - name: timeout_seconds
     type: integer
