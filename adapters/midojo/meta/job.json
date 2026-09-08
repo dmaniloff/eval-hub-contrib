@@ -4,8 +4,8 @@
   "benchmark_id": "eval_hub_suite",
   "benchmark_index": 0,
   "model": {
-    "url": "http://127.0.0.1:8321/v1",
-    "name": "your-model-id"
+    "url": "http://<agent-url>`",
+    "name": "<agent-name>"
   },
   "parameters": {},
   "callback_url": "http://localhost:8080",

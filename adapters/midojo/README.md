@@ -7,36 +7,34 @@ framework for AI agents: it runs benign **user tasks** crossed with adversarial
 - **utility** — did the agent still complete the benign task?
 - **security** — did the agent resist the injection?
 
-This adapter runs MiDojo over its **HTTP** transport (**Option C**). The two
-long-lived pieces live *outside* this job:
+This adapter fires off a MiDojo red team run in the following way:
 
-- the MiDojo **control plane** (`midojo-serve --suite eval_hub_suite`) is a
-  companion Deployment stood up by the TrustyAI operator from the EvalHub CR
-  (`spec.midojo.enabled: true`);
-- the **agent** under test is a separately-deployed HTTP service — the
-  `eval_hub_suite` pi agent (see `midojo/suites/eval_hub_suite/pi_agent`).
+1. The EvalHub CR stands up the MiDojo **control plane** (`midojo-serve`) as a
+  companion Deployment (`spec.midojo.enabled: true`).
+2. EvalHub launches the **adapter** (`midojo-run`) as a K8s job.
+3. The adapter drives the **agent under test**.
+4. Metrics (`avg_utility`, `attack_success_rate`) are reported back to EvalHub.
 
-The adapter is therefore short-lived: `main.py` runs only the orchestrator.
 
-## How it works
+## The pieces
 
-When the container runs `python main.py`, the adapter:
+| Piece | Repo | Role |
+|-------|------|------|
+| **Operator** | `trustyai-service-operator` | EvalHub CRD/controller. `spec.midojo.enabled` stands up the control-plane companion (Deployment/Service/Route) in the CR namespace. |
+| **Control plane** | `midojo` | `midojo-serve` — serves the suite, grades pairs. Open HTTP on `:8080`. |
+| **Agent** | It's own separate repo. For this example, we are using (`suites/eval_hub_suite/pi_agent`) in the `midojo`  repo| System under test. Gets deployed on its own along with the desired interception layers / hooks. Calls back to the control plane. |
+| **Adapter + provider** | `eval-hub-contrib` (`adapters/midojo`) | EvalHub Adapter. The `community-midojo` image contains the adapter *and* control plane, selected by command + config. |
 
-1. Resolves the control-plane URL and agent URI (from JobSpec parameters, env,
-   or in-cluster Service DNS defaults) and waits for both to be ready
-   (`GET <control_url>/suite` and `GET <agent_uri>/health`).
-2. Runs **`midojo-run --protocol http --suite eval_hub_suite --agent-uri <agent>
-   --control-url <control>`** (the orchestrator), which POSTs each prompt to the
-   agent, lets the agent's SDK hooks call back to the control plane, grades the
-   result, and writes `runs/results.json`.
-3. Maps `results.json` into eval-hub `EvaluationResult`s (`<pair>.utility`,
-   `<pair>.attack_success`, and the `avg_utility` / `attack_success_rate`
-   aggregates). `attack_success_rate` is lower-is-better (fraction of graded
-   injection pairs where the attack succeeded), so the composite is
-   `overall_score = mean(avg_utility, 1 - attack_success_rate)`.
+## Flow
 
-The suite (`eval_hub_suite`) is fixed for this adapter and ships in the MiDojo
-wheel; the agent's tools implement it.
+```
+EvalHub API ──creates──▶      adapter Job (midojo-run)
+                              │  drives               │ grades 
+                              ▼                       ▼
+                            agent ── reports ── ▶ control plane (midojo-serve)
+                                                      ▲
+EvalHub CRD (spec.midojo) ───── stands up ────────────┘
+```
 
 ## Configuration
 
@@ -61,50 +59,181 @@ Both endpoints must be reachable in-cluster. The agent's SDK hooks also call the
 control plane, so `control_url` must resolve from the agent pod as well as from
 this job — using a Service DNS name (the default) satisfies both.
 
-## Build
+## Setup
+In this setup we use the following vars:
 
-MiDojo is a private package, so the image installs it from a locally-built wheel
-staged into the build context. The `image-midojo` Makefile target does this for
-you (it builds the wheel from `MIDOJO_SRC`, defaulting to `../midojo`):
-
-```sh
-# from the repo root
-make image-midojo REGISTRY=quay.io/your-org VERSION=dev
-make push-midojo  REGISTRY=quay.io/your-org VERSION=dev
+```bash
+OPNS=trustyai-service-operator
+NS=<whatever-namespace-you-want>
 ```
 
-Manual equivalent:
+### 1. Build the agent image (`eval-hub-suite-agent`) & deploy it
 
-```sh
-(cd ../../midojo && uv build --wheel) && cp ../../midojo/dist/midojo-*.whl .
-podman build -t community-midojo:dev -f Containerfile .
+The agent is provided by the user/customer. Here we provide an example agent along with the interception hooks. Checkout the `feat/eval-hub-suite` of the midojo repo, then:
+
+```bash
+cd midojo
+# we are building images in the cluster via oc but you can use podman if you want
+oc new-build --binary --strategy=docker --name=eval-hub-suite-agent -n $NS
+oc patch bc eval-hub-suite-agent -n $NS --type=merge -p \
+  '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"suites/eval_hub_suite/pi_agent/Containerfile"}},"output":{"to":{"kind":"ImageStreamTag","name":"eval-hub-suite-agent:dev"}}}}'
+oc start-build eval-hub-suite-agent -n $NS --from-dir=. -F
 ```
 
-The same image serves the operator's control-plane companion — its Deployment
-just overrides the command to `midojo-serve --suite eval_hub_suite ...`.
+Deploy the example agent:
 
-## Deploy (Option C, OpenShift)
-
-```sh
-# 1. Enable the control plane on the EvalHub CR (companion Deployment/Service).
-oc apply -f deploy/evalhub-cr.yaml
-
-# 2. Deploy the agent under test (from the midojo repo).
-#    oc apply -k <midojo>/suites/eval_hub_suite/pi_agent/deploy -n openshell
-
-# 3. Register the provider, then run the adapter.
-oc apply -f deploy/evalhub-provider-midojo-system.yaml   # operator namespace
-oc apply -f deploy/adapter-job.yaml                       # one-shot run
-oc logs -n openshell -f job/midojo-eval-hub-suite
+```bash
+oc create secret generic eval-hub-suite-agent-llm-creds -n $NS \
+  --from-literal=LITELLM_API_KEY=... \
+  --from-literal=LITELLM_API_URL=https://<maas-endpoint>/v1 \
+  --from-literal=LITELLM_MODEL=<model-id>
+oc apply -k midojo/suites/eval_hub_suite/pi_agent/deploy -n $NS
+oc rollout status deploy/eval-hub-suite-agent -n $NS
 ```
 
-## Test
+Make sure it works:
 
-```sh
-make test-midojo
+```bash
+oc port forward
+curl
 ```
 
-The tests monkeypatch the orchestrator subprocess and the readiness polls, so no
-real control plane or agent is contacted — they cover config resolution, the
-`results.json` → metrics mapping (including N/A / utility-only exclusion from the
-security aggregate), the orchestrator command wiring, and the phase lifecycle.
+### 2. Build the adapter and control plane image (`community-midojo`)
+
+Checkout the `feat/eval-hub-suite` branch of the midojo repo, then:
+
+```bash
+# generate a MiDojo wheel (we will publish MiDojo to PyPI and this won't be necessary eventually)
+cd midojo
+uv build --wheel
+```
+
+Checkout the `feat/midojo-adapter` branch of the eval-hub-contrib repo, then:
+
+```bash
+# copy the wheel over to eval-hub-contrib and build the adapter image
+# this image will be called `community-midojo` and will have both the adapter and the control plane
+# we are building images in the cluster via oc but you can use podman if you want
+cp dist/midojo-*.whl ../eval-hub-contrib/adapters/midojo/
+cd ../eval-hub-contrib/adapters/midojo
+oc new-build --binary --strategy=docker --name=community-midojo -n $NS
+oc patch bc community-midojo -n $NS --type=merge -p \
+  '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"Containerfile"}},"output":{"to":{"kind":"ImageStreamTag","name":"community-midojo:dev"}}}}'
+oc start-build community-midojo -n $NS --from-dir=. -F
+```
+
+### 3. Build the operator (adds `spec.midojo` to the EvalHub CRD) and turn it on
+
+Checkout the `dmaniloff:feat/evalhub-midojo-control-plane` fork of trustyai-service-operator, then:
+
+```bash
+# build the operator
+cd trustyai-service-operator
+oc start-build trustyai-operator -n $OPNS --from-dir=. -F
+oc apply --server-side --force-conflicts \
+  -f config/components/evalhub/crd/trustyai.opendatahub.io_evalhubs.yaml
+
+# roll the manager to the new image digest
+DIGEST=$(oc get istag trustyai-operator:latest -n $OPNS -o jsonpath='{.image.dockerImageReference}')
+oc set image deploy/trustyai-service-operator-controller-manager manager=$DIGEST -n $OPNS
+oc rollout status deploy/trustyai-service-operator-controller-manager -n $OPNS
+
+# verify the new field exists
+oc explain evalhub.spec.midojo    
+```
+
+Start EvalHub with the MiDojo control plane enabled:
+
+```bash
+oc apply -f eval-hub-contrib/adapters/midojo/deploy/evalhub-cr.yaml   # spec.midojo.enabled: true
+oc rollout status deploy/evalhub-midojo -n $NS
+oc get evalhub evalhub -n $NS -o jsonpath='{.status.midojo}{"\n"}'     # ready: true
+```
+
+Make sure EvalHub and the control plane are both up:
+
+```bash
+# Kubernetes: Deployments available
+oc wait --for=condition=Available deploy/evalhub deploy/evalhub-midojo -n $NS --timeout=300s
+oc get deploy evalhub evalhub-midojo -n $NS
+
+# EvalHub CR: MiDojo companion status
+oc get evalhub evalhub -n $NS -o jsonpath='midojo phase={.status.midojo.phase} ready={.status.midojo.ready}{"\n"}'
+
+# HTTP: EvalHub API (unauthenticated; app listens on :8444 in the pod)
+EH_POD=$(oc get pods -n $NS -l app=eval-hub,instance=evalhub -o jsonpath='{.items[0].metadata.name}')
+oc port-forward -n $NS "pod/$EH_POD" 18444:8444 &
+sleep 2
+curl -s http://localhost:18444/api/v1/health   # expect "status":"healthy"
+
+# HTTP: MiDojo control plane (/suite returns 200 once eval_hub_suite is loaded)
+MJ_POD=$(oc get pods -n $NS -l component=midojo,instance=evalhub -o jsonpath='{.items[0].metadata.name}')
+oc port-forward -n $NS "pod/$MJ_POD" 18080:8080 &
+sleep 2
+curl -sf http://localhost:18080/suite && echo "control plane ready"
+```
+
+### 4. Register the provider as type=tenant
+
+The operator auto-discovers provider ConfigMaps in the **EvalHub instance
+namespace** (`$NS`) labeled
+`trustyai.opendatahub.io/evalhub-provider-type=tenant`, mounts them at
+`/etc/evalhub/config/providers/tenant/`, and hot-reloads them — no entry in
+`spec.providers` on the EvalHub CR is required. Create/patch the CM in `$NS` so
+its benchmark is `eval_hub_suite` and its image points at `community-midojo:dev`:
+
+```bash
+oc create configmap evalhub-provider-midojo -n $NS \
+  --from-file=midojo.yaml=eval-hub-contrib/adapters/midojo/provider.yaml \
+  --dry-run=client -o yaml | \
+  oc label -f - --local -o yaml \
+    trustyai.opendatahub.io/evalhub-provider-type=tenant \
+    trustyai.opendatahub.io/evalhub-provider-name=midojo | \
+  oc apply -f -
+```
+
+Or apply the checked-in manifest: `oc apply -n $NS -f deploy/evalhub-provider-midojo.yaml`
+
+
+### 5. Run the evaluation
+
+EvalHub requires a `model` block on every job. For MiDojo that does **not**
+configure the LLM — that stays on the agent Deployment (step 1). Use it to
+identify the **agent under test** in EvalHub:
+
+- `model.url` — agent HTTP base URL (not the MaaS endpoint)
+- `model.name` — agent name (stored on results; e.g. `eval-hub-suite-agent`)
+
+The adapter actually calls the agent using `MIDOJO_AGENT_URI` from the tenant
+provider (or `parameters.agent_uri` on the job). The POST body is written to
+`/meta/job.json` in the adapter pod — same shape as `meta/job.json`.
+
+EvalHub sits behind kube-rbac-proxy on `:8443`; the app listens on `:8444`.
+With `disable_auth: true` you can port-forward the app port directly and pass
+`X-Tenant`/`X-User` (tenant = namespace):
+
+```bash
+POD=$(oc get pods -n $NS -o name | grep -E 'pod/evalhub-[0-9a-f]' | head -1)
+oc port-forward -n $NS $POD 18444:8444 &
+
+curl -sX POST http://localhost:18444/api/v1/evaluations/jobs \
+  -H "X-Tenant: $NS" -H "X-User: $(oc whoami)" -H "Content-Type: application/json" \
+  -d '{"name":"midojo-run-1",
+       "model":{"url":"<agent-url>","name":"<agent-name>"},
+       "benchmarks":[{"id":"eval_hub_suite","provider_id":"midojo"}]}'
+```
+
+Poll `GET /api/v1/evaluations/jobs/<id>` until `status.state=completed`; results
+carry `avg_utility` and `attack_success_rate` (plus per-pair breakdown).
+
+## Reading results
+
+- **`attack_success_rate`** — fraction of pairs where the injection landed.
+  **Lower is better** (0.0 = resisted everything).
+- **`avg_utility`** — fraction where the agent still completed the benign task.
+  Higher is better.
+
+## Notes
+
+- Everything is fixed to `eval_hub_suite` and open HTTP by design — a starting
+  point to evolve (multi-suite, TLS) later.
