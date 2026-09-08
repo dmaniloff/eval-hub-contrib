@@ -67,6 +67,15 @@ OPNS=trustyai-service-operator
 NS=<whatever-namespace-you-want>
 ```
 
+And the following repos and branches:
+
+| Repo | Branch | Used for |
+|------|--------|----------|
+| [asago-ai/midojo](https://github.com/asago-ai/midojo) | `feat/eval-hub-suite` | Example agent (`eval-hub-suite-agent`), Adapter & control plane image (`community-midojo`) |
+| [dmaniloff/eval-hub-contrib](https://github.com/dmaniloff/eval-hub-contrib) | `feat/midojo-adapter` | MiDojo adapter|
+| [dmaniloff/trustyai-service-operator](https://github.com/dmaniloff/trustyai-service-operator) | `feat/evalhub-midojo-control-plane` | Operator + EvalHub CRD with `spec.midojo` |
+
+
 ### 1. Build the agent image (`eval-hub-suite-agent`) & deploy it
 
 The agent is provided by the user/customer. Here we provide an example agent along with the interception hooks. Checkout the `feat/eval-hub-suite` of the midojo repo, then:
@@ -91,11 +100,20 @@ oc apply -k midojo/suites/eval_hub_suite/pi_agent/deploy -n $NS
 oc rollout status deploy/eval-hub-suite-agent -n $NS
 ```
 
-Make sure it works:
+Make sure it works (port-forward in one terminal, then probe from another):
 
 ```bash
-oc port forward
-curl
+oc port-forward -n $NS svc/eval-hub-suite-agent 8000:8000
+```
+
+```bash
+curl -sf http://localhost:8000/health
+# -> {"status":"ok"}
+
+curl -sS -X POST http://localhost:8000/ \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"hi"}'
+# -> {"response":"..."}  (invokes the LLM; may take a few seconds)
 ```
 
 ### 2. Build the adapter and control plane image (`community-midojo`)
@@ -145,7 +163,9 @@ oc explain evalhub.spec.midojo
 Start EvalHub with the MiDojo control plane enabled:
 
 ```bash
-oc apply -f eval-hub-contrib/adapters/midojo/deploy/evalhub-cr.yaml   # spec.midojo.enabled: true
+export MIDOJO_IMAGE="${MIDOJO_IMAGE:-image-registry.openshift-image-registry.svc:5000/${NS}/community-midojo:dev}"
+
+envsubst '${MIDOJO_IMAGE}' < eval-hub-contrib/adapters/midojo/deploy/evalhub-cr.yaml | oc apply -n $NS -f -
 oc rollout status deploy/evalhub-midojo -n $NS
 oc get evalhub evalhub -n $NS -o jsonpath='{.status.midojo}{"\n"}'     # ready: true
 ```
@@ -174,6 +194,8 @@ curl -sf http://localhost:18080/suite && echo "control plane ready"
 ```
 
 ### 4. Register the provider as type=tenant
+
+Checkout the `dmaniloff:feat/midojo-adapter` fork of eval-hub-contrib, then:
 
 The operator auto-discovers provider ConfigMaps in the **EvalHub instance
 namespace** (`$NS`) labeled
