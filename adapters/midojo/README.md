@@ -211,16 +211,12 @@ oc get deploy evalhub evalhub-midojo-control-plane -n $NS
 # EvalHub CR: MiDojo companion status
 oc get evalhub evalhub -n $NS -o jsonpath='midojo phase={.status.midojo.phase} ready={.status.midojo.ready}{"\n"}'
 
-# HTTP: EvalHub API (unauthenticated; app listens on :8444 in the pod).
-# Forward to the Deployment rather than a pod: the name survives restarts, so
-# you never have to copy a pod hash out of `oc get pods`.
+# EvalHub API 
 oc port-forward -n $NS deploy/evalhub 18444:8444 &
 sleep 2
 curl -s http://localhost:18444/api/v1/health   # expect "status":"healthy"
 
-# HTTP: MiDojo control plane. It has no /health endpoint -- every route it
-# serves is run/eval state -- so /suite is the cheapest 200 once the suite is
-# loaded. Note it listens on :8080; there is nothing on :8444 in this pod.
+# MiDojo control plane
 oc port-forward -n $NS deploy/evalhub-midojo-control-plane 18080:8080 &
 sleep 2
 curl -sf http://localhost:18080/suite && echo "control plane ready"
@@ -309,12 +305,21 @@ auth setting on the CR is involved — just pass `X-Tenant`/`X-User` yourself
 ```bash
 oc port-forward -n $NS deploy/evalhub 18444:8444 &
 
+# Heredoc with an unquoted delimiter: ${NS} still expands, but the JSON needs
+# no backslash escaping, so you can paste it straight out of meta/job.json.
+# `-d @-` makes curl read the body from stdin.
 curl -sX POST http://localhost:18444/api/v1/evaluations/jobs \
   -H "X-Tenant: $NS" -H "X-User: $(oc whoami)" -H "Content-Type: application/json" \
-  -d "{\"name\":\"midojo-run-1\",
-       \"model\":{\"url\":\"http://eval-hub-suite-agent.${NS}.svc.cluster.local:8000\",
-                  \"name\":\"eval-hub-suite-agent\"},
-       \"benchmarks\":[{\"id\":\"eval_hub_suite\",\"provider_id\":\"midojo\"}]}"
+  -d @- <<EOF
+{
+  "name": "midojo-run-1",
+  "model": {
+    "url": "http://eval-hub-suite-agent.${NS}.svc.cluster.local:8000",
+    "name": "eval-hub-suite-agent"
+  },
+  "benchmarks": [{"id": "eval_hub_suite", "provider_id": "midojo"}]
+}
+EOF
 ```
 
 Poll `GET /api/v1/evaluations/jobs/<id>` until `status.state=completed`; results
