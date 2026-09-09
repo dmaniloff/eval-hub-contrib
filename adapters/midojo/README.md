@@ -211,15 +211,17 @@ oc get deploy evalhub evalhub-midojo-control-plane -n $NS
 # EvalHub CR: MiDojo companion status
 oc get evalhub evalhub -n $NS -o jsonpath='midojo phase={.status.midojo.phase} ready={.status.midojo.ready}{"\n"}'
 
-# HTTP: EvalHub API (unauthenticated; app listens on :8444 in the pod)
-EH_POD=$(oc get pods -n $NS -l app=eval-hub,instance=evalhub -o jsonpath='{.items[0].metadata.name}')
-oc port-forward -n $NS "pod/$EH_POD" 18444:8444 &
+# HTTP: EvalHub API (unauthenticated; app listens on :8444 in the pod).
+# Forward to the Deployment rather than a pod: the name survives restarts, so
+# you never have to copy a pod hash out of `oc get pods`.
+oc port-forward -n $NS deploy/evalhub 18444:8444 &
 sleep 2
 curl -s http://localhost:18444/api/v1/health   # expect "status":"healthy"
 
-# HTTP: MiDojo control plane (/suite returns 200 once eval_hub_suite is loaded)
-MJ_POD=$(oc get pods -n $NS -l component=midojo,instance=evalhub -o jsonpath='{.items[0].metadata.name}')
-oc port-forward -n $NS "pod/$MJ_POD" 18080:8080 &
+# HTTP: MiDojo control plane. It has no /health endpoint -- every route it
+# serves is run/eval state -- so /suite is the cheapest 200 once the suite is
+# loaded. Note it listens on :8080; there is nothing on :8444 in this pod.
+oc port-forward -n $NS deploy/evalhub-midojo-control-plane 18080:8080 &
 sleep 2
 curl -sf http://localhost:18080/suite && echo "control plane ready"
 ```
@@ -275,8 +277,7 @@ degrade gracefully, it crash-loops the EvalHub container:
 oc get evalhub evalhub -n $NS -o jsonpath='{.status.activeProviders}{"\n"}'
 # -> ["garak","garak-kfp","lm-evaluation-harness","midojo"]
 
-POD=$(oc get pods -n $NS -o name | grep -E 'pod/evalhub-[0-9a-f]' | head -1)
-oc logs -n $NS $POD -c evalhub | grep '"Provider loaded"'
+oc logs -n $NS deploy/evalhub -c evalhub | grep '"Provider loaded"'
 # -> one line per provider, including provider_id":"midojo"
 ```
 
@@ -306,8 +307,7 @@ auth setting on the CR is involved — just pass `X-Tenant`/`X-User` yourself
 (tenant = namespace):
 
 ```bash
-POD=$(oc get pods -n $NS -o name | grep -E 'pod/evalhub-[0-9a-f]' | head -1)
-oc port-forward -n $NS $POD 18444:8444 &
+oc port-forward -n $NS deploy/evalhub 18444:8444 &
 
 curl -sX POST http://localhost:18444/api/v1/evaluations/jobs \
   -H "X-Tenant: $NS" -H "X-User: $(oc whoami)" -H "Content-Type: application/json" \
